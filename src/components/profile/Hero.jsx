@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+
 export default function Hero({ therapist }) {
   const initials = therapist.name
     .replace(/^dr\.?\s+/i, '')
@@ -24,13 +26,12 @@ export default function Hero({ therapist }) {
           {therapist.languages.length > 0 && (
             <p className="mt-4 text-sm text-white/75">Sessions in {therapist.languages.join(', ')}</p>
           )}
-          {/* Becomes a link to the booking page in Module 2 */}
-          <button
-            disabled
-            className="mt-8 rounded-lg bg-white px-6 py-3 text-sm font-semibold text-tide disabled:cursor-not-allowed disabled:bg-white/70"
+          <Link
+            to={`/${therapist.slug}/book`}
+            className="mt-8 inline-block rounded-lg bg-white px-6 py-3 text-sm font-semibold text-tide hover:bg-fog"
           >
-            Online booking opens soon
-          </button>
+            Book a session
+          </Link>
         </div>
       </div>
     </header>
