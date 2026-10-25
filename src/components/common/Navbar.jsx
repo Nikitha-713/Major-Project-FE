@@ -1,0 +1,29 @@
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext.jsx';
+import Button from './Button.jsx';
+
+export default function Navbar() {
+  const { therapist, logout } = useAuth();
+  const navigate = useNavigate();
+
+  return (
+    <nav className="border-b border-mist bg-white">
+      <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
+        <Link to="/" className="font-display text-xl font-bold text-tide">Unfazed</Link>
+        <div className="flex items-center gap-3">
+          {therapist ? (
+            <>
+              <Link to="/dashboard" className="text-sm font-medium hover:text-tide">Dashboard</Link>
+              <Button variant="secondary" onClick={() => { logout(); navigate('/'); }}>Log out</Button>
+            </>
+          ) : (
+            <>
+              <Link to="/login" className="text-sm font-medium hover:text-tide">Log in</Link>
+              <Link to="/register"><Button>Create account</Button></Link>
+            </>
+          )}
+        </div>
+      </div>
+    </nav>
+  );
+}
