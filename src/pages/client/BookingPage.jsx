@@ -120,6 +120,18 @@ export default function BookingPage() {
           <p className="mt-4 text-lg">{booked.serviceTitle} with {booked.therapistName}</p>
           <p className="mt-1 font-semibold">{formatLongDate(dateKeyInZone(booked.startTime, tz))}, {formatTime(booked.startTime, tz)}</p>
           <p className="mt-1 text-sm text-ink/60">{booked.durationMin} minutes · times shown in {tz}</p>
+          {booked.portalToken && (
+            <div className="mt-6 rounded-lg bg-fog p-4">
+              <p className="font-semibold">One more step before your first session</p>
+              <p className="mt-1 text-sm text-ink/70">
+                Please complete a short intake form and consent. Save the link to this page: it is also your personal link for later.
+              </p>
+              <Link to={`/portal/${booked.portalToken}`}
+                className="mt-3 inline-block rounded-lg bg-tide px-4 py-2 text-sm font-semibold text-white hover:bg-tide-dark">
+                Complete intake form
+              </Link>
+            </div>
+          )}
           <Link to={`/${slug}`} className="mt-6 inline-block font-medium text-tide underline">Back to {booked.therapistName}'s page</Link>
         </div>
       </main>

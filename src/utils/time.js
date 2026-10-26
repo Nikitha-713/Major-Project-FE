@@ -35,3 +35,6 @@ export const formatMonth = (year, monthIndex) =>
   );
 
 export const todayKey = () => new Date().toISOString().slice(0, 10);
+
+export const formatDate = (iso, timeZone) =>
+  new Intl.DateTimeFormat(undefined, { timeZone, day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(iso));

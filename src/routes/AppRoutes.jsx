@@ -9,6 +9,9 @@ import Dashboard from '../pages/therapist/Dashboard.jsx';
 import Schedule from '../pages/therapist/Schedule.jsx';
 import PublicProfile from '../pages/client/PublicProfile.jsx';
 import BookingPage from '../pages/client/BookingPage.jsx';
+import Clients from '../pages/therapist/Clients.jsx';
+import ClientProfile from '../pages/therapist/ClientProfile.jsx';
+import ClientPortal from '../pages/client/ClientPortal.jsx';
 
 function ProtectedRoute({ children }) {
   const { therapist, loading } = useAuth();
@@ -26,6 +29,9 @@ export default function AppRoutes() {
         <Route path="/register" element={<Register />} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/dashboard/schedule" element={<ProtectedRoute><Schedule /></ProtectedRoute>} />
+        <Route path="/dashboard/clients" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
+        <Route path="/dashboard/clients/:id" element={<ProtectedRoute><ClientProfile /></ProtectedRoute>} />
+        <Route path="/portal/:token" element={<ClientPortal />} />
         <Route path="/:slug/book" element={<BookingPage />} />
         {/* Must stay last: matches any single-segment path as a therapist slug */}
         <Route path="/:slug" element={<PublicProfile />} />

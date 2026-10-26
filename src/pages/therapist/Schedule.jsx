@@ -56,7 +56,12 @@ export default function Schedule() {
               <li key={s._id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white p-4 ring-1 ring-mist">
                 <div>
                   <p className="font-semibold">{formatDateTime(s.startTime, tz)}</p>
-                  <p className="text-sm text-ink/70">{s.clientName} · {s.serviceTitle} · {s.durationMin} min</p>
+                  <p className="text-sm text-ink/70">
+                    {s.client
+                      ? <Link to={`/dashboard/clients/${s.client}`} className="font-medium text-tide underline">{s.clientName}</Link>
+                      : s.clientName}{' '}
+                    · {s.serviceTitle} · {s.durationMin} min
+                  </p>
                   <p className="text-xs text-ink/50">{s.clientEmail}{s.clientPhone ? ` · ${s.clientPhone}` : ''}</p>
                 </div>
                 <Button variant="secondary" onClick={() => cancel(s._id)}>Cancel session</Button>
