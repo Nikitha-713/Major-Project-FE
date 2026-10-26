@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import axiosInstance, { getErrorMessage } from '../../axiosInstance.js';
 import Calendar from '../../components/scheduling/Calendar.jsx';
@@ -7,11 +7,16 @@ import SlotPicker from '../../components/scheduling/SlotPicker.jsx';
 import Loader from '../../components/common/Loader.jsx';
 import Button from '../../components/common/Button.jsx';
 import { dateKeyInZone, detectTimezone, formatLongDate, formatTime, timezoneList } from '../../utils/time.js';
+import { formatINR, rupeesToPaise } from '../../utils/money.js';
+import { openCheckout } from '../../utils/razorpay.js';
 
 const inputClass = 'mt-1 w-full rounded-lg border border-mist bg-white px-3 py-2';
 
 export default function BookingPage() {
   const { slug } = useParams();
+  const [searchParams] = useSearchParams();
+  const portalToken = searchParams.get('portal') || undefined; // present when the client came from their personal page
+
   const [therapist, setTherapist] = useState(null);
   const [status, setStatus] = useState('loading'); // loading | ready | missing
   const [serviceId, setServiceId] = useState(null);
@@ -22,11 +27,14 @@ export default function BookingPage() {
   const [tz, setTz] = useState(detectTimezone());
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedSlot, setSelectedSlot] = useState(null);
+  const [portal, setPortal] = useState(null);
+  const [pending, setPending] = useState(null); // booking held while the client pays
+  const [payMessage, setPayMessage] = useState('');
   const [booked, setBooked] = useState(null);
+  const [paidOnline, setPaidOnline] = useState(false);
   const [error, setError] = useState('');
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm();
 
-  // Load the therapist profile (services come from here).
   useEffect(() => {
     axiosInstance
       .get(`/therapists/public/${slug}`)
@@ -42,7 +50,12 @@ export default function BookingPage() {
       .catch(() => setStatus('missing'));
   }, [slug]);
 
-  // Load open slots whenever the session length changes (or after a clash).
+  // A personal link unlocks package credits and pre-fills nothing sensitive.
+  useEffect(() => {
+    if (!portalToken) return;
+    axiosInstance.get(`/portal/${portalToken}`).then((res) => setPortal(res.data)).catch(() => setPortal(null));
+  }, [portalToken]);
+
   useEffect(() => {
     if (!therapist) return undefined;
     let cancelled = false;
@@ -55,7 +68,6 @@ export default function BookingPage() {
     return () => { cancelled = true; };
   }, [slug, therapist, durationMin, refreshKey]);
 
-  // Group slots by the CLIENT's local date so the calendar matches what they see.
   const slotsByDate = useMemo(() => {
     const map = new Map();
     (slotData?.slots || []).forEach((iso) => {
@@ -76,11 +88,44 @@ export default function BookingPage() {
   const selectedService = therapist?.services.find((s) => s.id === serviceId);
   const activeDuration = selectedService ? selectedService.durationMin : durationMin ?? slotData?.durationMin;
 
+  // Money: does this booking cost anything, and can a package credit cover it?
+  const pricePaise = selectedService && typeof selectedService.price === 'number' ? rupeesToPaise(selectedService.price) : 0;
+  const credit = portal?.packages?.find((p) => p.status === 'active' && p.sessionsRemaining > 0 && p.durationMin === activeDuration);
+  const payRequired = Boolean(slotData?.paymentRequired) && pricePaise > 0 && !credit;
+
   const chooseService = (service) => {
     setServiceId(service.id);
     setDurationMin(service.durationMin);
     setSelectedSlot(null);
     setError('');
+  };
+
+  const startCheckout = async (p) => {
+    setPayMessage('');
+    try {
+      await openCheckout({
+        payment: p.payment,
+        businessName: therapist.name,
+        prefill: p.prefill,
+        onSuccess: async (response) => {
+          try {
+            await axiosInstance.post('/payments/verify', response);
+            setPaidOnline(true);
+            setBooked(p.session);
+            setPending(null);
+          } catch (err) {
+            setError(getErrorMessage(err));
+            setPending(null);
+            setSelectedSlot(null);
+            setRefreshKey((k) => k + 1);
+          }
+        },
+        onDismiss: () => setPayMessage('The payment window was closed. Your time is still held for a few minutes, so you can try again.'),
+        onError: (msg) => setPayMessage(msg),
+      });
+    } catch (err) {
+      setPayMessage(err.message);
+    }
   };
 
   const onSubmit = async ({ clientName, clientEmail, clientPhone }) => {
@@ -91,13 +136,20 @@ export default function BookingPage() {
         serviceId: selectedService ? selectedService.id : undefined,
         durationMin: selectedService ? undefined : activeDuration,
         clientName, clientEmail, clientPhone, clientTimezone: tz,
+        portalToken,
       });
-      setBooked(res.data.session);
+      if (res.data.requiresPayment) {
+        const p = { session: res.data.session, payment: res.data.payment, prefill: { name: clientName, email: clientEmail, contact: clientPhone } };
+        setPending(p);
+        startCheckout(p);
+      } else {
+        setBooked(res.data.session);
+      }
     } catch (err) {
       setError(getErrorMessage(err));
       if (err.response?.status === 409) {
         setSelectedSlot(null);
-        setRefreshKey((k) => k + 1); // someone else took it: reload fresh times
+        setRefreshKey((k) => k + 1);
       }
     }
   };
@@ -120,15 +172,17 @@ export default function BookingPage() {
           <p className="mt-4 text-lg">{booked.serviceTitle} with {booked.therapistName}</p>
           <p className="mt-1 font-semibold">{formatLongDate(dateKeyInZone(booked.startTime, tz))}, {formatTime(booked.startTime, tz)}</p>
           <p className="mt-1 text-sm text-ink/60">{booked.durationMin} minutes · times shown in {tz}</p>
+          {paidOnline && <p className="mt-3 text-sm text-tide">Payment received. Your invoice is on your personal page.</p>}
+          {booked.paidWithPackage && <p className="mt-3 text-sm text-tide">One credit from your package was used.</p>}
           {booked.portalToken && (
             <div className="mt-6 rounded-lg bg-fog p-4">
               <p className="font-semibold">One more step before your first session</p>
               <p className="mt-1 text-sm text-ink/70">
-                Please complete a short intake form and consent. Save the link to this page: it is also your personal link for later.
+                Please complete a short intake form and consent. Save the link to this page: it is also your personal page for invoices and packages.
               </p>
               <Link to={`/portal/${booked.portalToken}`}
                 className="mt-3 inline-block rounded-lg bg-tide px-4 py-2 text-sm font-semibold text-white hover:bg-tide-dark">
-                Complete intake form
+                Open my personal page
               </Link>
             </div>
           )}
@@ -138,8 +192,28 @@ export default function BookingPage() {
     );
   }
 
+  if (pending) {
+    return (
+      <main className="mx-auto max-w-xl px-6 py-20">
+        <div className="rounded-xl bg-white p-8 ring-1 ring-mist">
+          <h1 className="font-display text-3xl font-bold">Complete your payment</h1>
+          <p className="mt-3">
+            {pending.session.serviceTitle} with {pending.session.therapistName}<br />
+            <span className="font-semibold">{formatLongDate(dateKeyInZone(pending.session.startTime, tz))}, {formatTime(pending.session.startTime, tz)}</span>
+          </p>
+          <p className="mt-3 text-sm text-ink/70">We are holding this time for you for about {pending.payment.holdMinutes} minutes.</p>
+          {payMessage && <p role="alert" className="mt-4 text-sm text-danger">{payMessage}</p>}
+          <Button className="mt-6" onClick={() => startCheckout(pending)}>Pay {formatINR(pending.payment.amount)}</Button>
+        </div>
+      </main>
+    );
+  }
+
   const daySlots = selectedDate ? slotsByDate.get(selectedDate) || [] : [];
   const noAvailability = !loadingSlots && slotData && slotData.slots.length === 0;
+  const submitLabel = isSubmitting
+    ? 'Booking…'
+    : payRequired ? `Continue to pay ${formatINR(pricePaise)}` : credit ? 'Confirm using package credit' : 'Confirm booking';
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-12">
@@ -154,7 +228,9 @@ export default function BookingPage() {
               <button key={s.id} type="button" onClick={() => chooseService(s)} aria-pressed={s.id === serviceId}
                 className={`rounded-xl p-4 text-left ring-1 transition-colors ${s.id === serviceId ? 'bg-tide text-white ring-tide' : 'bg-white ring-mist hover:ring-tide'}`}>
                 <span className="block font-semibold">{s.title}</span>
-                <span className={`text-sm ${s.id === serviceId ? 'text-white/80' : 'text-ink/60'}`}>{s.durationMin} minutes</span>
+                <span className={`text-sm ${s.id === serviceId ? 'text-white/80' : 'text-ink/60'}`}>
+                  {s.durationMin} minutes{typeof s.price === 'number' ? ` · ${formatINR(rupeesToPaise(s.price))}` : ''}
+                </span>
               </button>
             ))}
           </div>
@@ -176,6 +252,12 @@ export default function BookingPage() {
         </section>
       )}
 
+      {credit && (
+        <p className="mt-6 rounded-lg bg-white p-3 text-sm ring-1 ring-tide/40">
+          This session will use one credit from your package <strong>{credit.name}</strong> ({credit.sessionsRemaining} left). No payment needed.
+        </p>
+      )}
+
       <section className="mt-10" aria-labelledby="pick-time">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <h2 id="pick-time" className="font-display text-xl font-bold">Pick a day and time</h2>
@@ -191,9 +273,7 @@ export default function BookingPage() {
         {loadingSlots && !slotData ? (
           <Loader label="Finding open times" />
         ) : noAvailability ? (
-          <p className="mt-6 rounded-xl bg-white p-6 ring-1 ring-mist">
-            {therapist.name} has no open times right now. Please check back soon.
-          </p>
+          <p className="mt-6 rounded-xl bg-white p-6 ring-1 ring-mist">{therapist.name} has no open times right now. Please check back soon.</p>
         ) : (
           <div className="mt-5 grid gap-6 md:grid-cols-[1fr_1fr]">
             <Calendar availableDates={availableDates} selected={selectedDate}
@@ -231,7 +311,7 @@ export default function BookingPage() {
               <label htmlFor="clientPhone" className="block text-sm font-medium">Phone (optional)</label>
               <input id="clientPhone" type="tel" autoComplete="tel" maxLength={20} className={inputClass} {...register('clientPhone')} />
             </div>
-            <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Booking…' : 'Confirm booking'}</Button>
+            <Button type="submit" disabled={isSubmitting}>{submitLabel}</Button>
           </form>
         </section>
       )}

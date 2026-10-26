@@ -6,6 +6,8 @@ import AvailabilityEditor from '../../components/scheduling/AvailabilityEditor.j
 import Button from '../../components/common/Button.jsx';
 import { detectTimezone, formatDateTime } from '../../utils/time.js';
 
+const PAYMENT_LABEL = { paid: 'Paid', pending: 'Awaiting payment', package: 'Package credit', refunded: 'Refunded' };
+
 export default function Schedule() {
   const { therapist } = useAuth();
   const [sessions, setSessions] = useState(null);
@@ -64,7 +66,12 @@ export default function Schedule() {
                   </p>
                   <p className="text-xs text-ink/50">{s.clientEmail}{s.clientPhone ? ` · ${s.clientPhone}` : ''}</p>
                 </div>
-                <Button variant="secondary" onClick={() => cancel(s._id)}>Cancel session</Button>
+                <div className="flex items-center gap-3">
+                  {PAYMENT_LABEL[s.paymentStatus] && (
+                    <span className="rounded-full bg-fog px-2.5 py-1 text-xs font-medium">{PAYMENT_LABEL[s.paymentStatus]}</span>
+                  )}
+                  <Button variant="secondary" onClick={() => cancel(s._id)}>Cancel session</Button>
+                </div>
               </li>
             ))}
           </ul>

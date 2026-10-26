@@ -4,6 +4,8 @@ import axiosInstance, { getErrorMessage } from '../../axiosInstance.js';
 import ClientCard from '../../components/crm/ClientCard.jsx';
 import Loader from '../../components/common/Loader.jsx';
 import { detectTimezone, formatDate, formatDateTime } from '../../utils/time.js';
+import { formatINR } from '../../utils/money.js';
+import { downloadAuthedFile } from '../../utils/download.js';
 
 const STATUS_LABEL = { confirmed: 'Upcoming', completed: 'Completed', cancelled: 'Cancelled', no_show: 'No-show' };
 
@@ -40,7 +42,7 @@ export default function ClientProfile() {
   }
   if (!data) return <Loader label="Loading client" />;
 
-  const { client, sessions, consents } = data;
+  const { client, sessions, consents, payments = [], packages = [] } = data;
   const intake = client.intake;
 
   return (
@@ -109,8 +111,49 @@ export default function ClientProfile() {
       </section>
 
       <section>
+        <h2 className="font-display text-xl font-bold">Packages</h2>
+        {packages.length === 0 ? (
+          <p className="mt-3 text-ink/70">No packages bought.</p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {packages.map((p) => (
+              <li key={p._id} className="rounded-xl bg-white p-4 text-sm ring-1 ring-mist">
+                <p className="font-semibold">{p.name}</p>
+                <p className="text-ink/70">
+                  {p.sessionsRemaining} of {p.sessionsTotal} sessions left · {formatINR(p.perSessionRate)} per session ·{' '}
+                  {p.status === 'expired' ? 'expired on' : 'valid until'} {p.expiresAt ? formatDate(p.expiresAt, tz) : ''}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section>
         <h2 className="font-display text-xl font-bold">Payments</h2>
-        <p className="mt-3 text-ink/70">No payments yet.</p>
+        {payments.length === 0 ? (
+          <p className="mt-3 text-ink/70">No payments yet.</p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {payments.map((p) => (
+              <li key={p._id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white p-4 text-sm ring-1 ring-mist">
+                <div>
+                  <p className="font-semibold">{p.description}</p>
+                  <p className="text-ink/70">
+                    {formatINR(p.amount)} · {formatDate(p.paidAt || p.createdAt, tz)} ·{' '}
+                    {{ paid: 'Paid', created: 'Not completed', refunded: 'Refunded', failed: 'Failed' }[p.status]}
+                  </p>
+                </div>
+                {p.invoiceNumber && (
+                  <button type="button" className="font-medium text-tide underline"
+                    onClick={() => downloadAuthedFile(`/payments/${p._id}/invoice`, `${p.invoiceNumber}.pdf`)}>
+                    Invoice {p.invoiceNumber}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section>
