@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import axiosInstance, { getErrorMessage } from '../../axiosInstance.js';
 import IntakeForm from '../../components/crm/IntakeForm.jsx';
 import Loader from '../../components/common/Loader.jsx';
+import RichTextView from '../../components/notes/RichTextView.jsx';
 import Button from '../../components/common/Button.jsx';
 import { detectTimezone, formatDate, formatDateTime } from '../../utils/time.js';
 import { formatINR } from '../../utils/money.js';
@@ -15,6 +16,7 @@ export default function ClientPortal() {
   const [serverError, setServerError] = useState('');
   const [notice, setNotice] = useState({ type: '', text: '' });
   const [busyPackage, setBusyPackage] = useState(null);
+  const [notes, setNotes] = useState([]);
   const tz = detectTimezone();
 
   const load = useCallback(
@@ -26,6 +28,11 @@ export default function ClientPortal() {
     [token]
   );
   useEffect(() => { load(); }, [load]);
+
+  // Notes your therapist chose to share. Private notes are never sent to this page by the server.
+  useEffect(() => {
+    axiosInstance.get(`/portal/${token}/notes`).then((res) => setNotes(res.data.notes)).catch(() => setNotes([]));
+  }, [token]);
 
   const submit = async (payload) => {
     setServerError('');
@@ -104,6 +111,30 @@ export default function ClientPortal() {
         )}
         <p className="mt-2 text-xs text-ink/60">Times shown in {tz}</p>
       </section>
+
+      {notes.length > 0 && (
+        <section>
+          <h2 className="font-display text-xl font-bold">Notes from {portal.therapist.name}</h2>
+          <ul className="mt-3 space-y-3">
+            {notes.map((n) => (
+              <li key={n.id} className="rounded-xl bg-white p-5 ring-1 ring-mist">
+                <h3 className="font-display text-lg font-bold">{n.title || 'A note for you'}</h3>
+                <p className="text-xs text-ink/60">
+                  Shared {formatDate(n.sharedAt, tz)}{n.sessionDate ? ` · session on ${formatDate(n.sessionDate, tz)}` : ''}
+                </p>
+                <div className="mt-3 space-y-3">
+                  {n.sections.map((s) => (
+                    <div key={s.key}>
+                      {n.sections.length > 1 && <h4 className="text-xs font-semibold uppercase tracking-wide text-ink/60">{s.label}</h4>}
+                      <RichTextView doc={s.content} />
+                    </div>
+                  ))}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {portal.intakeCompleted ? (
         <section className="rounded-xl bg-white p-6 ring-1 ring-mist" role="status">

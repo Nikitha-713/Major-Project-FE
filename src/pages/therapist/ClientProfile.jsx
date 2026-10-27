@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import axiosInstance, { getErrorMessage } from '../../axiosInstance.js';
 import ClientCard from '../../components/crm/ClientCard.jsx';
+import ClientNotes from '../../components/notes/ClientNotes.jsx';
 import Loader from '../../components/common/Loader.jsx';
 import { detectTimezone, formatDate, formatDateTime } from '../../utils/time.js';
 import { formatINR } from '../../utils/money.js';
@@ -156,10 +157,7 @@ export default function ClientProfile() {
         )}
       </section>
 
-      <section>
-        <h2 className="font-display text-xl font-bold">Session notes</h2>
-        <p className="mt-3 text-ink/70">No notes yet.</p>
-      </section>
+      <ClientNotes clientId={client.id} sessions={sessions} />
     </main>
   );
 }
