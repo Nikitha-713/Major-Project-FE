@@ -6,10 +6,17 @@ import ClientTable from '../../components/crm/ClientTable.jsx';
 import Button from '../../components/common/Button.jsx';
 import Loader from '../../components/common/Loader.jsx';
 
+// --- NEW IMPORTS FOR CHAT ---
+import { useAuth } from '../../context/AuthContext.jsx';
+import { connectSocket, disconnectSocket } from '../../sockets/socketClient.js';
+import ChatWindow from '../../components/chat/ChatWindow.jsx';
+
 const field = 'mt-1 w-full rounded-lg border border-mist bg-white px-3 py-2 text-sm';
 
 export default function Clients() {
   const navigate = useNavigate();
+  const { therapist } = useAuth(); // Get logged-in therapist
+  
   const [params, setParams] = useState({ search: '', status: '', tag: '', sort: 'name', order: 'asc', page: 1 });
   const [searchInput, setSearchInput] = useState('');
   const [data, setData] = useState(null);
@@ -17,6 +24,16 @@ export default function Clients() {
   const [showAdd, setShowAdd] = useState(false);
   const [addError, setAddError] = useState('');
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm();
+  
+  // --- NEW STATE FOR CHAT ---
+  const [activeChatClient, setActiveChatClient] = useState(null);
+
+  // --- NEW EFFECT TO CONNECT SOCKET ---
+  useEffect(() => {
+    const token = localStorage.getItem('unfazed_token');
+    if (token) connectSocket(token);
+    return () => disconnectSocket();
+  }, []);
 
   // Wait for the therapist to stop typing before searching.
   useEffect(() => {
@@ -113,7 +130,14 @@ export default function Clients() {
           </p>
         ) : (
           <>
-            <ClientTable clients={data.clients} sort={params.sort} order={params.order} onSort={onSort} />
+            {/* Notice we added onMessageClick here! */}
+            <ClientTable 
+              clients={data.clients} 
+              sort={params.sort} 
+              order={params.order} 
+              onSort={onSort} 
+              onMessageClick={(client) => setActiveChatClient(client)} 
+            />
             <div className="mt-4 flex items-center justify-between text-sm">
               <span className="text-ink/70">{data.total} client{data.total === 1 ? '' : 's'}</span>
               <div className="flex items-center gap-3">
@@ -125,6 +149,22 @@ export default function Clients() {
           </>
         )}
       </div>
+
+      {/* --- CHAT DRAWER (This goes right before </main>) --- */}
+      {activeChatClient && (
+        <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white shadow-2xl ring-1 ring-mist p-6 transition-transform overflow-y-auto">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold font-display">Chat with {activeChatClient.name}</h2>
+            <button onClick={() => setActiveChatClient(null)} className="text-ink/50 hover:text-ink text-2xl font-bold">&times;</button>
+          </div>
+          <ChatWindow 
+            therapistId={therapist?.id} 
+            clientId={activeChatClient.id} 
+            currentRole="therapist" 
+          />
+        </div>
+      )}
+
     </main>
   );
 }
