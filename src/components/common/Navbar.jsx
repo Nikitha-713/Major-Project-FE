@@ -5,7 +5,7 @@ export default function Navbar() {
   const { therapist, logout } = useAuth();
   const navigate = useNavigate();
 
-  if (!therapist) return null; // Only show the menu if logged in
+  if (!therapist) return null;
 
   const handleLogout = () => {
     logout();
@@ -19,12 +19,12 @@ export default function Navbar() {
           Unfazed
         </Link>
         <div className="flex flex-wrap items-center gap-4 text-sm font-medium">
-          <Link to="/dashboard/profile" className="hover:text-tide">Profile</Link>
+          {/* Changed to point to /dashboard */}
+          <Link to="/dashboard" className="hover:text-tide">Profile</Link>
           <Link to="/dashboard/schedule" className="hover:text-tide">Schedule</Link>
           <Link to="/dashboard/clients" className="hover:text-tide">Clients</Link>
           <Link to="/dashboard/notes" className="hover:text-tide">Notes</Link>
           <Link to="/dashboard/payments" className="hover:text-tide">Payments</Link>
-          {/* THIS IS THE NEW ANALYTICS LINK */}
           <Link to="/dashboard/analytics" className="hover:text-tide">Analytics</Link>
           
           <button onClick={handleLogout} className="ml-4 rounded-lg border border-mist px-3 py-1.5 hover:bg-fog">
