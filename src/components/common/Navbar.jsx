@@ -18,6 +18,7 @@ export default function Navbar() {
               <Link to="/dashboard/clients" className="text-sm font-medium hover:text-tide">Clients</Link>
               <Link to="/dashboard/notes" className="text-sm font-medium hover:text-tide">Notes</Link>
               <Link to="/dashboard/payments" className="text-sm font-medium hover:text-tide">Payments</Link>
+              <Link to="/dashboard/analytics" className="text-sm font-medium hover:text-tide">Analytics</Link>
               <Button variant="secondary" onClick={() => { logout(); navigate('/'); }}>Log out</Button>
             </>
           ) : (

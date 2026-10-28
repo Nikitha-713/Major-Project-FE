@@ -1,3 +1,5 @@
+import { connectPortalSocket, disconnectSocket } from '../../sockets/socketClient.js';
+import ChatWindow from '../../components/chat/ChatWindow.jsx';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import axiosInstance, { getErrorMessage } from '../../axiosInstance.js';
@@ -33,7 +35,11 @@ export default function ClientPortal() {
   useEffect(() => {
     axiosInstance.get(`/portal/${token}/notes`).then((res) => setNotes(res.data.notes)).catch(() => setNotes([]));
   }, [token]);
-
+  useEffect(() => {
+  if (!token) return;
+  connectPortalSocket(token);
+  return () => disconnectSocket();
+  }, [token]); 
   const submit = async (payload) => {
     setServerError('');
     try {
@@ -111,7 +117,23 @@ export default function ClientPortal() {
         )}
         <p className="mt-2 text-xs text-ink/60">Times shown in {tz}</p>
       </section>
-
+            <section className="rounded-xl bg-white p-5 ring-1 ring-mist">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-display text-lg font-bold">Your upcoming sessions</h2>
+          <Link to={`/${portal.therapist.slug}/book?portal=${token}`}
+            className="rounded-lg bg-tide px-4 py-2 text-sm font-semibold text-white hover:bg-tide-dark">Book a session</Link>
+        </div>
+        {portal.upcomingSessions.length === 0 ? (
+          <p className="mt-3 text-sm text-ink/70">Nothing booked yet.</p>
+        ) : (
+          <ul className="mt-2 space-y-1 text-sm">
+            {portal.upcomingSessions.map((s) => (
+              <li key={s._id}>{formatDateTime(s.startTime, tz)} · {s.serviceTitle} ({s.durationMin} min)</li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-2 text-xs text-ink/60">Times shown in {tz}</p>
+      </section>
       {notes.length > 0 && (
         <section>
           <h2 className="font-display text-xl font-bold">Notes from {portal.therapist.name}</h2>

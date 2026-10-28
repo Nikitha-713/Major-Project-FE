@@ -1,3 +1,4 @@
+import Analytics from '../pages/therapist/Analytics.jsx';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import Navbar from '../components/common/Navbar.jsx';
@@ -32,6 +33,7 @@ export default function AppRoutes() {
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/dashboard/schedule" element={<ProtectedRoute><Schedule /></ProtectedRoute>} />
         <Route path="/dashboard/clients" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
+        <Route path="/dashboard/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
         <Route path="/dashboard/clients/:id" element={<ProtectedRoute><ClientProfile /></ProtectedRoute>} />
         <Route path="/dashboard/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
         <Route path="/dashboard/notes" element={<ProtectedRoute><Notes /></ProtectedRoute>} />

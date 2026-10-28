@@ -1,29 +1,38 @@
 import axios from 'axios';
 
 const axiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api', 
 });
 
-// Attach the JWT to every request.
-axiosInstance.interceptors.request.use((config) => {
-  const token = localStorage.getItem('unfazed_token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
-// If the token is rejected, clear it so the app falls back to the logged-out state.
-axiosInstance.interceptors.response.use(
-  (res) => res,
-  (err) => {
-    const isAuthCall = err.config?.url?.startsWith('/auth/login') || err.config?.url?.startsWith('/auth/register');
-    if (err.response?.status === 401 && !isAuthCall) {
-      localStorage.removeItem('unfazed_token');
+// --- THE MAGIC FIX: Automatically attach the token to EVERY request ---
+axiosInstance.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('unfazed_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
-    return Promise.reject(err);
-  }
+    return config;
+  },
+  (error) => Promise.reject(error)
 );
 
-export const getErrorMessage = (err) =>
-  err.response?.data?.message || 'Could not reach the server. Check your connection and try again.';
+export const getErrorMessage = (err) => {
+  if (err.response?.data?.message) return err.response.data.message;
+  if (err.response?.data?.errors?.[0]?.msg) return err.response.data.errors[0].msg;
+  return err.message || 'Something went wrong';
+};
+
+// Interceptor to catch Module 7 gates (Triggers the Upgrade Popup)
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 403 && error.response?.data?.code === 'UPGRADE_REQUIRED') {
+      window.dispatchEvent(new CustomEvent('upgrade-required', { 
+        detail: { message: error.response.data.message } 
+      }));
+    }
+    return Promise.reject(error);
+  }
+);
 
 export default axiosInstance;

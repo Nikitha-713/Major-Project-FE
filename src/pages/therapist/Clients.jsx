@@ -6,16 +6,17 @@ import ClientTable from '../../components/crm/ClientTable.jsx';
 import Button from '../../components/common/Button.jsx';
 import Loader from '../../components/common/Loader.jsx';
 
-// --- NEW IMPORTS FOR CHAT ---
+// --- CHAT & MODAL IMPORTS ---
 import { useAuth } from '../../context/AuthContext.jsx';
 import { connectSocket, disconnectSocket } from '../../sockets/socketClient.js';
 import ChatWindow from '../../components/chat/ChatWindow.jsx';
+import UpgradeModal from '../../components/common/UpgradeModal.jsx';
 
 const field = 'mt-1 w-full rounded-lg border border-mist bg-white px-3 py-2 text-sm';
 
 export default function Clients() {
   const navigate = useNavigate();
-  const { therapist } = useAuth(); // Get logged-in therapist
+  const { therapist } = useAuth(); 
   
   const [params, setParams] = useState({ search: '', status: '', tag: '', sort: 'name', order: 'asc', page: 1 });
   const [searchInput, setSearchInput] = useState('');
@@ -25,17 +26,24 @@ export default function Clients() {
   const [addError, setAddError] = useState('');
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm();
   
-  // --- NEW STATE FOR CHAT ---
+  // CHAT & MODAL STATE
   const [activeChatClient, setActiveChatClient] = useState(null);
+  const [upgradeModal, setUpgradeModal] = useState({ isOpen: false, reason: '' });
 
-  // --- NEW EFFECT TO CONNECT SOCKET ---
+  // LISTEN FOR UPGRADE ERRORS
+  useEffect(() => {
+    const handleUpgrade = (e) => setUpgradeModal({ isOpen: true, reason: e.detail.message });
+    window.addEventListener('upgrade-required', handleUpgrade);
+    return () => window.removeEventListener('upgrade-required', handleUpgrade);
+  }, []);
+
+  // CONNECT SOCKET
   useEffect(() => {
     const token = localStorage.getItem('unfazed_token');
     if (token) connectSocket(token);
     return () => disconnectSocket();
   }, []);
 
-  // Wait for the therapist to stop typing before searching.
   useEffect(() => {
     const t = setTimeout(() => setParams((p) => (p.search === searchInput ? p : { ...p, search: searchInput, page: 1 })), 300);
     return () => clearTimeout(t);
@@ -130,7 +138,6 @@ export default function Clients() {
           </p>
         ) : (
           <>
-            {/* Notice we added onMessageClick here! */}
             <ClientTable 
               clients={data.clients} 
               sort={params.sort} 
@@ -150,7 +157,7 @@ export default function Clients() {
         )}
       </div>
 
-      {/* --- CHAT DRAWER (This goes right before </main>) --- */}
+      {/* CHAT DRAWER */}
       {activeChatClient && (
         <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white shadow-2xl ring-1 ring-mist p-6 transition-transform overflow-y-auto">
           <div className="flex items-center justify-between mb-4">
@@ -165,6 +172,12 @@ export default function Clients() {
         </div>
       )}
 
+      {/* UPGRADE MODAL */}
+      <UpgradeModal 
+        isOpen={upgradeModal.isOpen} 
+        onClose={() => setUpgradeModal({ isOpen: false, reason: '' })} 
+        reason={upgradeModal.reason} 
+      />
     </main>
   );
 }

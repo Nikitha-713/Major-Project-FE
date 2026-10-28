@@ -1,99 +1,124 @@
-import { useEffect, useState, useRef } from 'react';
-import { getSocket } from '../../sockets/socketClient';
-import Button from '../common/Button.jsx';
+import { useEffect, useRef, useState } from 'react';
+import axiosInstance from '../../axiosInstance.js';
+import { connectSocket, getSocket } from '../../sockets/socketClient.js';
 
+/**
+ * Props (same as used in Clients.jsx):
+ *   therapistId, clientId, currentRole ('therapist' | 'client')
+ */
 export default function ChatWindow({ therapistId, clientId, currentRole }) {
+  const otherId = currentRole === 'therapist' ? clientId : therapistId;
+
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const messagesEndRef = useRef(null);
-  const socket = getSocket();
+  const [text, setText] = useState('');
+  const [connected, setConnected] = useState(false);
+  const [otherTyping, setOtherTyping] = useState(false);
+  const [error, setError] = useState('');
+  const bottomRef = useRef(null);
+  const typingTimer = useRef(null);
 
   useEffect(() => {
-    if (!socket || !therapistId || !clientId) return;
+    if (!otherId) return undefined;
+    let alive = true;
 
-    // 1. Join the room
-    socket.emit('chat:join', { therapistId, clientId }, (ack) => {
-      if (!ack.ok) console.error('Failed to join chat', ack.error);
-    });
+    axiosInstance
+      .get(`/chat/${otherId}`)
+      .then((res) => alive && setMessages(res.data))
+      .catch(() => alive && setError('Could not load earlier messages'));
 
-    // 2. Fetch previous messages (REST fallback)
-    // Note: For portal, you'd call a different endpoint. Assuming this is therapist view for now.
-    if (currentRole === 'therapist') {
-      // You can add the fetch here if needed, or rely purely on socket if you don't need history
-    }
+    const token = localStorage.getItem('unfazed_token') || localStorage.getItem('unfazed_client_token');
+    const socket = getSocket() || connectSocket(token);
 
-    // 3. Listen for incoming messages
-    const handleNewMessage = (msg) => {
-      setMessages((prev) => [...prev, msg]);
+    const join = () => {
+      setConnected(true);
+      setError('');
+      socket.emit('chat:join', { otherId });
+      socket.emit('chat:read', { otherId });
     };
-    const handleTyping = ({ fromRole, isTyping }) => {
-      if (fromRole !== currentRole) setIsTyping(isTyping);
+    const onMessage = (m) => {
+      setMessages((prev) => (prev.some((x) => x._id === m._id) ? prev : [...prev, m]));
+      if (m.senderRole !== currentRole) socket.emit('chat:read', { otherId });
     };
+    const onTyping = ({ role, isTyping }) => role !== currentRole && setOtherTyping(isTyping);
+    const onRead = () =>
+      setMessages((prev) => prev.map((m) => (m.senderRole === currentRole && !m.readAt ? { ...m, readAt: new Date().toISOString() } : m)));
+    const onDisconnect = () => setConnected(false);
+    const onError = (err) => { setConnected(false); setError(`Chat connection failed: ${err.message}`); };
 
-    socket.on('chat:message', handleNewMessage);
-    socket.on('chat:typing', handleTyping);
+    if (socket.connected) join();
+    socket.on('connect', join);
+    socket.on('disconnect', onDisconnect);
+    socket.on('connect_error', onError);
+    socket.on('chat:message', onMessage);
+    socket.on('chat:typing', onTyping);
+    socket.on('chat:read', onRead);
 
     return () => {
-      socket.off('chat:message', handleNewMessage);
-      socket.off('chat:typing', handleTyping);
+      alive = false;
+      socket.off('connect', join);
+      socket.off('disconnect', onDisconnect);
+      socket.off('connect_error', onError);
+      socket.off('chat:message', onMessage);
+      socket.off('chat:typing', onTyping);
+      socket.off('chat:read', onRead);
     };
-  }, [socket, therapistId, clientId, currentRole]);
+  }, [otherId, currentRole]);
 
-  // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, otherTyping]);
 
-  const handleSend = (e) => {
+  const send = (e) => {
     e.preventDefault();
-    if (!input.trim() || !socket) return;
-
-    socket.emit('chat:send', { therapistId, clientId, body: input }, (ack) => {
-      if (ack.ok) setInput('');
-      else alert('Failed to send message');
+    const socket = getSocket();
+    if (!text.trim() || !socket) return;
+    socket.emit('chat:send', { otherId, text: text.trim() }, (ack) => {
+      if (ack && ack.ok === false) setError(`Message not sent: ${ack.error}`);
     });
-    socket.emit('chat:typing', { therapistId, clientId, isTyping: false });
+    socket.emit('chat:typing', { otherId, isTyping: false });
+    setText('');
   };
 
-  const handleTypingInput = (e) => {
-    setInput(e.target.value);
-    socket?.emit('chat:typing', { therapistId, clientId, isTyping: e.target.value.length > 0 });
+  const onChange = (e) => {
+    setText(e.target.value);
+    const socket = getSocket();
+    socket?.emit('chat:typing', { otherId, isTyping: true });
+    clearTimeout(typingTimer.current);
+    typingTimer.current = setTimeout(() => socket?.emit('chat:typing', { otherId, isTyping: false }), 1200);
   };
 
   return (
-    <div className="flex h-[500px] flex-col rounded-xl bg-white ring-1 ring-mist">
-      {/* Header */}
-      <div className="border-b border-mist p-4 font-display font-bold text-ink">Secure Chat</div>
-
-      {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 && <p className="text-center text-sm text-ink/50">No messages yet. Say hello!</p>}
-        
-        {messages.map((m, i) => {
-          const isMe = m.senderRole === currentRole;
+    <div className="flex h-[480px] flex-col rounded-xl ring-1 ring-mist">
+      <div className="flex-1 space-y-2 overflow-y-auto p-3">
+        {messages.map((m) => {
+          const mine = m.senderRole === currentRole;
           return (
-            <div key={i} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[70%] rounded-lg px-4 py-2 text-sm ${isMe ? 'bg-tide text-white' : 'bg-mist/50 text-ink'}`}>
-                {m.body}
+            <div key={m._id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${mine ? 'bg-tide text-white' : 'bg-fog text-ink'}`}>
+                <p className="whitespace-pre-wrap break-words">{m.text}</p>
+                <p className="mt-1 text-[10px] opacity-70">
+                  {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {mine && m.readAt ? ' · Read' : ''}
+                </p>
               </div>
             </div>
           );
         })}
-        {isTyping && <p className="text-xs text-ink/50 italic">Typing...</p>}
-        <div ref={messagesEndRef} />
+        {otherTyping && <p className="text-xs italic text-ink/60">typing…</p>}
+        <div ref={bottomRef} />
       </div>
 
-      {/* Input Area */}
-      <form onSubmit={handleSend} className="flex gap-2 border-t border-mist p-4">
+      {error && <p role="alert" className="px-3 text-xs text-danger">{error}</p>}
+      {!connected && !error && <p className="px-3 text-xs text-ink/60">Connecting…</p>}
+
+      <form onSubmit={send} className="flex gap-2 border-t border-mist p-2">
         <input
-          type="text"
-          value={input}
-          onChange={handleTypingInput}
-          placeholder="Type a message..."
-          className="flex-1 rounded-lg border border-mist px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-tide"
+          value={text}
+          onChange={onChange}
+          placeholder="Type a message"
+          className="flex-1 rounded-lg border border-mist px-3 py-2 text-sm"
         />
-        <Button type="submit" disabled={!input.trim()}>Send</Button>
+        <button type="submit" disabled={!connected || !text.trim()} className="rounded-lg bg-tide px-4 py-2 text-sm text-white disabled:opacity-50">
+          Send
+        </button>
       </form>
     </div>
   );
